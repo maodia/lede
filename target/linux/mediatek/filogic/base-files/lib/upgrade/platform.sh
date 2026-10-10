@@ -16,6 +16,12 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
+	tplink,tl-7dr7299-v1)
+		[ -e /dev/fit0 ] && fitblk /dev/fit0
+		[ -e /dev/fitrw ] && fitblk /dev/fitrw
+		CI_KERNPART="fit"
+		nand_do_upgrade "$1"
+		;;
 	asus,tuf-ax4200|\
 	asus,tuf-ax6000)
 		CI_UBIPART="UBI_DEV"
@@ -24,7 +30,9 @@ platform_do_upgrade() {
 		;;
 	bananapi,bpi-r3|\
 	bananapi,bpi-r4|\
-	bananapi,bpi-r4-poe)
+	bananapi,bpi-r4-2g5|\
+	bananapi,bpi-r4-poe|\
+	bananapi,bpi-r4-lite)
 		[ -e /dev/fit0 ] && fitblk /dev/fit0
 		[ -e /dev/fitrw ] && fitblk /dev/fitrw
 		bootdev="$(fitblk_get_bootdev)"
@@ -44,12 +52,16 @@ platform_do_upgrade() {
 		esac
 		;;
 	cmcc,rax3000m-emmc|\
+	cmcc,rax3000me-emmc|\
+	cmcc,xr30-emmc|\
+	clx,s20l|\
 	glinet,gl-mt2500|\
 	glinet,gl-mt6000|\
 	glinet,gl-x3000|\
 	glinet,gl-xe3000|\
 	hf,m7986r1-emmc|\
 	huasifei,wh3000-emmc|\
+	huasifei,wh3000-pro|\
 	jdcloud,re-cs-05)
 		CI_KERNPART="kernel"
 		CI_ROOTPART="rootfs"
@@ -70,9 +82,12 @@ platform_check_image() {
 	[ "$#" -gt 1 ] && return 1
 
 	case "$board" in
+	tplink,tl-7dr7299-v1|\
 	bananapi,bpi-r3|\
 	bananapi,bpi-r4|\
-	bananapi,bpi-r4-poe)
+	bananapi,bpi-r4-2g5|\
+	bananapi,bpi-r4-poe|\
+	bananapi,bpi-r4-lite)
 		[ "$magic" != "d00dfeed" ] && {
 			echo "Invalid image type."
 			return 1
@@ -92,7 +107,9 @@ platform_copy_config() {
 	case "$(board_name)" in
 	bananapi,bpi-r3|\
 	bananapi,bpi-r4|\
-	bananapi,bpi-r4-poe)
+	bananapi,bpi-r4-2g5|\
+	bananapi,bpi-r4-poe|\
+	bananapi,bpi-r4-lite)
 		case "$(cmdline_get_var root)" in
 		/dev/mmc*)
 			emmc_copy_config
@@ -100,12 +117,16 @@ platform_copy_config() {
 		esac
 		;;
 	cmcc,rax3000m-emmc|\
+	cmcc,rax3000me-emmc|\
+	cmcc,xr30-emmc|\
+	clx,s20l|\
 	glinet,gl-mt2500|\
 	glinet,gl-mt6000|\
 	glinet,gl-x3000|\
 	glinet,gl-xe3000|\
 	hf,m7986r1-emmc|\
 	huasifei,wh3000-emmc|\
+	huasifei,wh3000-pro|\
 	jdcloud,re-cs-05)
 		emmc_copy_config
 		;;

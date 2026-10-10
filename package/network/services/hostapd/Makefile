@@ -5,13 +5,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=hostapd
-PKG_RELEASE:=$(AUTORELEASE)
+PKG_RELEASE:=1
 
-PKG_SOURCE_URL:=http://w1.fi/hostap.git
+PKG_SOURCE_URL:=https://w1.fi/hostap.git
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_DATE:=2022-07-29
-PKG_SOURCE_VERSION:=b704dc72ef824dfdd96674b90179b274d1d38105
-PKG_MIRROR_HASH:=6c9dd359ef5a4595b6576e07928566d6864957c4af6466d641d6c3f7717f4689
+PKG_SOURCE_DATE:=2024-09-15
+PKG_SOURCE_VERSION:=5ace39b0a4cdbe18ddbc4e18f80ee3876233c20b
+PKG_MIRROR_HASH:=fb845d06e0440034300bce36db10afc261371176923acc1cff7b3e32f745da47
 
 PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
 PKG_LICENSE:=BSD-3-Clause
@@ -25,9 +25,9 @@ PKG_CONFIG_DEPENDS:= \
 	CONFIG_PACKAGE_hostapd-basic \
 	CONFIG_PACKAGE_hostapd-mini \
 	CONFIG_WPA_RFKILL_SUPPORT \
-	CONFIG_DRIVER_WEXT_SUPPORT \
 	CONFIG_DRIVER_11AC_SUPPORT \
 	CONFIG_DRIVER_11AX_SUPPORT \
+	CONFIG_DRIVER_11BE_SUPPORT \
 	CONFIG_WPA_ENABLE_WEP
 
 PKG_BUILD_FLAGS:=gc-sections lto
@@ -80,14 +80,26 @@ ifneq ($(CONFIG_DRIVER_11AX_SUPPORT),)
   HOSTAPD_IEEE80211AX:=y
 endif
 
-CORE_DEPENDS = +ucode +libubus +libucode +ucode-mod-fs +ucode-mod-nl80211 +ucode-mod-rtnl +ucode-mod-ubus +ucode-mod-uloop +libblobmsg-json
+ifneq ($(CONFIG_DRIVER_11BE_SUPPORT),)
+  HOSTAPD_IEEE80211BE:=y
+endif
+
+
+CORE_DEPENDS = +ucode +libucode \
+	+ucode-mod-fs +ucode-mod-nl80211 +ucode-mod-rtnl +ucode-mod-ubus +ucode-mod-uloop \
+	+libubus +libblobmsg-json
+OPENSSL_DEPENDS = +PACKAGE_$(1):libopenssl +PACKAGE_$(1):libopenssl-legacy
 
 DRIVER_MAKEOPTS= \
-	CONFIG_ACS=y CONFIG_DRIVER_NL80211=y \
+	CONFIG_DRIVER_NL80211=y \
 	CONFIG_IEEE80211AC=$(HOSTAPD_IEEE80211AC) \
 	CONFIG_IEEE80211AX=$(HOSTAPD_IEEE80211AX) \
-	CONFIG_DRIVER_WEXT=$(CONFIG_DRIVER_WEXT_SUPPORT) \
+	CONFIG_IEEE80211BE=$(HOSTAPD_IEEE80211BE) \
 	CONFIG_MBO=$(CONFIG_WPA_MBO_SUPPORT)
+
+ifneq ($(LOCAL_TYPE),supplicant)
+  DRIVER_MAKEOPTS += CONFIG_ACS=y
+endif
 
 ifeq ($(SSL_VARIANT),openssl)
   DRIVER_MAKEOPTS += CONFIG_TLS=openssl CONFIG_SAE=y
@@ -172,7 +184,7 @@ define Package/hostapd-openssl
 $(call Package/hostapd/Default,$(1))
   TITLE+= (OpenSSL full)
   VARIANT:=full-openssl
-  DEPENDS+=+PACKAGE_hostapd-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
 endef
 
 Package/hostapd-openssl/description = $(Package/hostapd/description)
@@ -279,7 +291,7 @@ define Package/wpad-openssl
 $(call Package/wpad/Default,$(1))
   TITLE+= (OpenSSL full)
   VARIANT:=wpad-full-openssl
-  DEPENDS+=+PACKAGE_wpad-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
 endef
 
 Package/wpad-openssl/description = $(Package/wpad/description)
@@ -316,7 +328,7 @@ define Package/wpad-basic-openssl
 $(call Package/wpad/Default,$(1))
   TITLE+= (OpenSSL, 11r, 11w)
   VARIANT:=wpad-basic-openssl
-  DEPENDS+=+PACKAGE_wpad-basic-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
 endef
 
 define Package/wpad-basic-openssl/description
@@ -368,7 +380,7 @@ endef
 define Package/wpad-mesh-openssl
 $(call Package/wpad-mesh,$(1))
   TITLE+= (OpenSSL, 11s, SAE)
-  DEPENDS+=+PACKAGE_wpad-mesh-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
   VARIANT:=wpad-mesh-openssl
 endef
 
@@ -400,7 +412,7 @@ define Package/wpa-supplicant/Default
   TITLE:=WPA Supplicant
   URL:=http://hostap.epitest.fi/wpa_supplicant/
   DEPENDS:=$(DRV_DEPENDS) +hostapd-common $(CORE_DEPENDS)
-  EXTRA_DEPENDS:=hostapd-common (=$(PKG_VERSION)-$(PKG_RELEASE))
+  EXTRA_DEPENDS:=hostapd-common (=$(PKG_VERSION)-r$(PKG_RELEASE))
   USERID:=network=101:network=101
   PROVIDES:=wpa-supplicant
   CONFLICTS:=$(SUPPLICANT_PROVIDERS)
@@ -417,7 +429,7 @@ define Package/wpa-supplicant-openssl
 $(call Package/wpa-supplicant/Default,$(1))
   TITLE+= (OpenSSL full)
   VARIANT:=supplicant-full-openssl
-  DEPENDS+=+PACKAGE_wpa-supplicant-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
 endef
 
 define Package/wpa-supplicant-wolfssl
@@ -454,7 +466,7 @@ define Package/wpa-supplicant-mesh-openssl
 $(call Package/wpa-supplicant-mesh/Default,$(1))
   TITLE+= (OpenSSL, 11s, SAE)
   VARIANT:=supplicant-mesh-openssl
-  DEPENDS+=+PACKAGE_wpa-supplicant-mesh-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
 endef
 
 define Package/wpa-supplicant-mesh-wolfssl
@@ -520,7 +532,7 @@ define Package/eapol-test/Default
   SECTION:=net
   SUBMENU:=WirelessAPD
   CATEGORY:=Network
-  DEPENDS:=$(DRV_DEPENDS) +libubus
+  DEPENDS:=$(DRV_DEPENDS) $(CORE_DEPENDS)
 endef
 
 define Package/eapol-test
@@ -534,7 +546,7 @@ define Package/eapol-test-openssl
   TITLE+= (OpenSSL full)
   VARIANT:=supplicant-full-openssl
   CONFLICTS:=$(filter-out eapol-test-openssl ,$(EAPOL_TEST_PROVIDERS))
-  DEPENDS+=+PACKAGE_eapol-test-openssl:libopenssl
+  DEPENDS+=$(OPENSSL_DEPENDS)
   PROVIDES:=eapol-test
 endef
 
@@ -584,8 +596,6 @@ TARGET_CPPFLAGS := \
 	-DCONFIG_LIBNL20 \
 	-D_GNU_SOURCE \
 	$(if $(CONFIG_WPA_MSG_MIN_PRIORITY),-DCONFIG_MSG_MIN_PRIORITY=$(CONFIG_WPA_MSG_MIN_PRIORITY))
-
-TARGET_LDFLAGS += -lubox -lubus
 
 TARGET_LDFLAGS += -lubox -lubus -lblobmsg_json -lucode -lm -lnl-tiny
 
@@ -672,8 +682,37 @@ define Build/Compile
 	$(Build/Compile/$(BUILD_VARIANT))
 endef
 
+define Install/hostapd/full
+	$(INSTALL_DIR) $(1)/etc/init.d $(1)/etc/config $(1)/etc/radius
+	ln -sf hostapd $(1)/usr/sbin/hostapd-radius
+	$(INSTALL_BIN) ./files/radius.init $(1)/etc/init.d/radius
+	$(INSTALL_DATA) ./files/radius.config $(1)/etc/config/radius
+	$(INSTALL_DATA) ./files/radius.clients $(1)/etc/radius/clients
+	$(INSTALL_DATA) ./files/radius.users $(1)/etc/radius/users
+endef
+
+define Package/hostapd-full/conffiles
+/etc/config/radius
+/etc/radius
+endef
+
+ifeq ($(CONFIG_VARIANT),full)
+Package/wpad-mesh-openssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad-mesh-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad-mesh-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad-openssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/wpad-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
+Package/hostapd/conffiles = $(Package/hostapd-full/conffiles)
+Package/hostapd-openssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/hostapd-wolfssl/conffiles = $(Package/hostapd-full/conffiles)
+Package/hostapd-mbedtls/conffiles = $(Package/hostapd-full/conffiles)
+endif
+
 define Install/hostapd
 	$(INSTALL_DIR) $(1)/usr/sbin
+	$(if $(findstring full,$(CONFIG_VARIANT)),$(Install/hostapd/full))
 endef
 
 define Install/supplicant
@@ -681,7 +720,12 @@ define Install/supplicant
 endef
 
 define Package/hostapd-common/install
-	$(INSTALL_DIR) $(1)/etc/capabilities $(1)/etc/rc.button $(1)/etc/hotplug.d/ieee80211 $(1)/etc/init.d $(1)/lib/netifd  $(1)/usr/share/acl.d
+	$(INSTALL_DIR) \
+	  $(1)/etc/capabilities \
+	  $(1)/etc/rc.button \
+	  $(1)/etc/hotplug.d/ieee80211 \
+	  $(1)/etc/init.d $(1)/lib/netifd \
+	  $(1)/usr/share/acl.d
 	$(INSTALL_BIN) ./files/dhcp-get-server.sh $(1)/lib/netifd/dhcp-get-server.sh
 	$(INSTALL_DATA) ./files/hostapd.sh $(1)/lib/netifd/hostapd.sh
 	$(INSTALL_BIN) ./files/wpad.init $(1)/etc/init.d/wpad
